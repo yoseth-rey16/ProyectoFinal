@@ -1,0 +1,242 @@
+import sqlite3
+
+# Define el archivo de la base de datos
+DATABASE_FILE = "inventario_chacuteria.db"
+
+# --- Funciones Auxiliares ---
+def limpiar_pantalla():
+    """Limpia la pantalla de la consola."""
+    import os
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+def validar_entrada_numero(prompt):
+    """Pide al usuario un número y lo valida."""
+    while True:
+        try:
+            valor_str = input(prompt)
+            if not valor_str:
+                return None  # Permite entrada vacía para campos opcionales
+            valor = float(valor_str)
+            if valor < 0:
+                print("Error: Por favor, ingrese un valor no negativo.")
+            else:
+                return valor
+        except ValueError:
+            print("Error: Por favor, ingrese un número válido.")
+
+def validar_entrada_entero(prompt):
+    """Pide al usuario un entero y lo valida."""
+    while True:
+        try:
+            valor_str = input(prompt)
+            if not valor_str:
+                return None  # Permite entrada vacía para campos opcionales
+            valor = int(valor_str)
+            if valor < 0:
+                print("Error: Por favor, ingrese un entero no negativo.")
+            else:
+                return valor
+        except ValueError:
+            print("Error: Por favor, ingrese un entero válido.")
+
+# --- Operaciones de Base de Datos ---
+def crear_conexion():
+    """Crea una conexión a la base de datos SQLite."""
+    conn = None
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        return conn
+    except sqlite3.Error as e:
+        print(f"Error al conectar a la base de datos: {e}")
+    return conn
+
+def cerrar_conexion(conn):
+    """Cierra la conexión a la base de datos."""
+    if conn:
+        conn.close()
+
+def crear_tabla():
+    """Crea la tabla 'Productos' si no existe."""
+    conn = crear_conexion()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS Productos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT NOT NULL UNIQUE,
+                    cantidad INTEGER NOT NULL,
+                    precio REAL NOT NULL
+                )
+            """)
+            conn.commit()
+            print("Tabla 'Productos' creada exitosamente (si no existía).")
+        except sqlite3.Error as e:
+            print(f"Error al crear la tabla: {e}")
+        finally:
+            cerrar_conexion(conn)
+
+def agregar_producto(nombre, cantidad, precio):
+    """Agrega un nuevo producto a la base de datos."""
+    conn = crear_conexion()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO Productos (nombre, cantidad, precio) VALUES (?, ?, ?)", (nombre, cantidad, precio))
+            conn.commit()
+            print(f"Producto '{nombre}' agregado exitosamente.")
+        except sqlite3.IntegrityError:
+            print(f"Error: Ya existe un producto con el nombre '{nombre}'.")
+        except sqlite3.Error as e:
+            print(f"Error al agregar el producto: {e}")
+        finally:
+            cerrar_conexion(conn)
+
+def ver_productos():
+    """Lista todos los productos en el inventario."""
+    conn = crear_conexion()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, nombre, cantidad, precio FROM Productos ORDER BY nombre")
+            productos = cursor.fetchall()
+            if productos:
+                print("\n--- Inventario de la Chacutería ---")
+                for producto in productos:
+                    print(f"ID: {producto[0]}, Nombre: {producto[1]}, Cantidad: {producto[2]}, Precio: ${producto[3]:.2f}")
+                print("-----------------------------------")
+            else:
+                print("El inventario está vacío.")
+        except sqlite3.Error as e:
+            print(f"Error al obtener los productos: {e}")
+        finally:
+            cerrar_conexion(conn)
+
+def modificar_producto(producto_id, nueva_cantidad=None, nuevo_precio=None):
+    """Modifica la cantidad o el precio de un producto existente."""
+    conn = crear_conexion()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            if nueva_cantidad is not None and nuevo_precio is not None:
+                cursor.execute("UPDATE Productos SET cantidad = ?, precio = ? WHERE id = ?", (nueva_cantidad, nuevo_precio, producto_id))
+                if cursor.rowcount > 0:
+                    print(f"Producto con ID {producto_id} actualizado exitosamente.")
+                else:
+                    print(f"Producto con ID {producto_id} no encontrado.")
+            elif nueva_cantidad is not None:
+                cursor.execute("UPDATE Productos SET cantidad = ? WHERE id = ?", (nueva_cantidad, producto_id))
+                if cursor.rowcount > 0:
+                    print(f"Cantidad del producto con ID {producto_id} actualizada exitosamente.")
+                else:
+                    print(f"Producto con ID {producto_id} no encontrado.")
+            elif nuevo_precio is not None:
+                cursor.execute("UPDATE Productos SET precio = ? WHERE id = ?", (nuevo_precio, producto_id))
+                if cursor.rowcount > 0:
+                    print(f"Precio del producto con ID {producto_id} actualizado exitosamente.")
+                else:
+                    print(f"Producto con ID {producto_id} no encontrado.")
+            else:
+                print("No se especificaron cambios.")
+            conn.commit()
+        except sqlite3.Error as e:
+            print(f"Error al modificar el producto: {e}")
+        finally:
+            cerrar_conexion(conn)
+
+def eliminar_producto(producto_id):
+    """Elimina un producto del inventario."""
+    conn = crear_conexion()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM Productos WHERE id = ?", (producto_id,))
+            if cursor.rowcount > 0:
+                print(f"Producto con ID {producto_id} eliminado exitosamente.")
+            else:
+                print(f"Producto con ID {producto_id} no encontrado.")
+            conn.commit()
+        except sqlite3.Error as e:
+            print(f"Error al eliminar el producto: {e}")
+        finally:
+            cerrar_conexion(conn)
+
+def buscar_producto(termino_busqueda):
+    """Busca un producto por nombre o ID."""
+    conn = crear_conexion()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            if termino_busqueda.isdigit():
+                cursor.execute("SELECT id, nombre, cantidad, precio FROM Productos WHERE id = ?", (termino_busqueda,))
+            else:
+                cursor.execute("SELECT id, nombre, cantidad, precio FROM Productos WHERE LOWER(nombre) LIKE ?", (f"%{termino_busqueda.lower()}%",))
+            productos = cursor.fetchall()
+            if productos:
+                print("\n--- Resultados de la Búsqueda ---")
+                for producto in productos:
+                    print(f"ID: {producto[0]}, Nombre: {producto[1]}, Cantidad: {producto[2]}, Precio: ${producto[3]:.2f}")
+                print("---------------------------------")
+            else:
+                print(f"No se encontraron productos que coincidan con '{termino_busqueda}'.")
+        except sqlite3.Error as e:
+            print(f"Error al buscar el producto: {e}")
+        finally:
+            cerrar_conexion(conn)
+
+# --- Menú Principal ---
+def menu_principal():
+    """Muestra el menú principal y maneja la entrada del usuario."""
+    crear_tabla()  # Asegura que la tabla exista al iniciar el programa
+
+    while True:
+        print("\n--- Sistema de Gestión de Chacutería ---")
+        print("1. Agregar Nuevo Producto")
+        print("2. Ver Inventario")
+        print("3. Modificar Producto")
+        print("4. Eliminar Producto")
+        print("5. Buscar Producto")
+        print("6. Salir")
+
+        opcion = input("Ingrese su opción: ")
+
+        if opcion == '1':
+            nombre = input("Ingrese el nombre del producto: ")
+            cantidad = validar_entrada_entero("Ingrese la cantidad: ")
+            precio = validar_entrada_numero("Ingrese el precio: ")
+            if nombre and cantidad is not None and precio is not None:
+                agregar_producto(nombre, cantidad, precio)
+        elif opcion == '2':
+            ver_productos()
+        elif opcion == '3':
+            id_producto_str = input("Ingrese el ID del producto a modificar: ")
+            if id_producto_str.isdigit():
+                id_producto = int(id_producto_str)
+                print("Deje en blanco si no desea modificar un campo.")
+                nueva_cantidad = validar_entrada_entero("Ingrese la nueva cantidad (deje en blanco para omitir): ")
+                nuevo_precio = validar_entrada_numero("Ingrese el nuevo precio (deje en blanco para omitir): ")
+                modificar_producto(id_producto, nueva_cantidad, nuevo_precio)
+            else:
+                print("ID de producto inválido.")
+        elif opcion == '4':
+            id_producto_str = input("Ingrese el ID del producto a eliminar: ")
+            if id_producto_str.isdigit():
+                id_producto = int(id_producto_str)
+                eliminar_producto(id_producto)
+            else:
+                print("ID de producto inválido.")
+        elif opcion == '5':
+            termino_busqueda = input("Ingrese el nombre o ID del producto a buscar: ")
+            if termino_busqueda:
+                buscar_producto(termino_busqueda)
+            else:
+                print("El término de búsqueda no puede estar vacío.")
+        elif opcion == '6':
+            print("Saliendo del Sistema de Gestión de Chacutería. ¡Hasta luego!")
+            break
+        else:
+            print("Opción inválida. Por favor, intente de nuevo.")
+
+if __name__ == "__main__":
+    menu_principal()
+
